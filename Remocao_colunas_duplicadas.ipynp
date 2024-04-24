@@ -1,0 +1,39 @@
+%%spark
+# Inicializando o SparkSession
+#spark = SparkSession.builder.appName("Deduplicate Columns").getOrCreate()
+
+# Exemplo de DataFrame com colunas duplicadas
+data = [
+    (1, "A", "B"),
+    (2, "B", "C")
+]
+columns = ["id", "value", "value"]  # 'value' está duplicado
+df = spark.createDataFrame(data, columns)
+
+# Função para remover colunas duplicadas
+def remove_duplicate_columns(df):
+    # Criar um dicionário para manter o controle dos nomes de colunas e suas contagens
+    new_columns = []
+    col_counts = {}
+    
+    for col_name in df.columns:
+        count = col_counts.get(col_name, 0)
+        if count > 0:
+            new_name = f"{col_name}_{count}"
+        else:
+            new_name = col_name
+        new_columns.append(new_name)
+        col_counts[col_name] = count + 1
+    
+    # Renomear colunas no DataFrame
+    df = df.toDF(*new_columns)
+    
+    # Selecionar apenas a primeira ocorrência de cada nome de coluna original
+    final_columns = [f"{col_name}_{col_counts[col_name]-1}" if col_counts[col_name] > 1 else col_name for col_name in col_counts]
+    df = df.select(*final_columns)
+    
+    return df
+
+# Aplicando a função para remover duplicidades
+df_clean = remove_duplicate_columns(df)
+df_clean.show()
