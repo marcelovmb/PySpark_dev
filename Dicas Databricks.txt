@@ -1,0 +1,125 @@
+#Dicar PySpark
+
+--------------------------------------
+#Quando você tem consultas frequentes em grandes tabelas que aplicam filtros (WHERE, JOIN, etc.) em colunas específicas, como date, customer_id, ou region.
+OPTIMIZE my_table
+ZORDER BY (customer_id, date);
+
+#Isso otimiza a tabela para consultas baseadas em customer_id e date.
+#Benefícios:
+#Reduz o IO (Input/Output) ao acessar apenas os arquivos relevantes.
+#Melhora o desempenho de consultas em tabelas muito grandes com muitos arquivos particionados.
+
+--------------------------------------
+#Cenário:
+#Você gerencia uma tabela de pacientes chamada pacientes_delta que contém dados sensíveis sobre histórico médico. Por engano, um analista deletou ou alterou registros importantes, e agora você precisa restaurar os dados para o estado em que estavam antes do incidente.
+
+CREATE TABLE pacientes_delta (
+    id INT,
+    nome STRING,
+    diagnostico STRING
+) USING DELTA;
+
+INSERT INTO pacientes_delta VALUES
+    (1, 'Maria', 'Hipertensão'),
+    (2, 'João', 'Diabetes'),
+    (3, 'Ana', 'Asma');
+---
+UPDATE pacientes_delta
+SET diagnostico = 'Nenhum'
+WHERE id = 2;
+---
+SELECT * FROM pacientes_delta VERSION AS OF 0;
+SELECT * FROM pacientes_delta TIMESTAMP AS OF '2025-01-15T10:00:00.000+0000';
+RESTORE TABLE pacientes_delta TO VERSION AS OF 0;
+--
+#Você pode usar o comando para identificar as versões da tabela, para então identificar qual estada deseja fazer o restore. 
+DESCRIBE HISTORY nome_da_tabela;
+--------------------------------------
+#Usando UDFs:
+
+#Calcular o IMC (Índice de Massa Corporal) de pacientes a partir de suas alturas e pesos. O cálculo não está disponível nativamente no Spark.
+from pyspark.sql.functions import udf
+from pyspark.sql.types import DoubleType
+
+# Função Python para calcular o IMC
+def calcular_imc(peso, altura):
+    if altura > 0:  # Evita divisão por zero
+        return peso / (altura ** 2)
+    return None
+
+# Registrar a função como UDF
+calcular_imc_udf = udf(calcular_imc, DoubleType())
+
+# Criar DataFrame com dados de exemplo
+dados = [(1, 70.0, 1.75), (2, 80.0, 1.80), (3, 90.0, 0)]  # ID, Peso, Altura
+colunas = ["id", "peso", "altura"]
+df = spark.createDataFrame(dados, colunas)
+
+# Aplicar a UDF no DataFrame
+df_com_imc = df.withColumn("imc", calcular_imc_udf(df.peso, df.altura))
+
+# Mostrar o resultado
+df_com_imc.show()
+
+--
+#Escrever uma UDF para converter strings em letras maiúsculas, simulando uma necessidade customizada.
+from pyspark.sql.functions import udf
+from pyspark.sql.types import StringType
+
+# Função Python para converter texto para maiúsculas
+def para_maiusculas(texto):
+    if texto:
+        return texto.upper()
+    return None
+
+# Registrar como UDF
+para_maiusculas_udf = udf(para_maiusculas, StringType())
+
+# Criar DataFrame com dados de exemplo
+dados = [("João",), ("Maria",), ("Carlos",)]
+colunas = ["nome"]
+df = spark.createDataFrame(dados, colunas)
+
+# Aplicar a UDF
+df_maiusculo = df.withColumn("nome_maiusculo", para_maiusculas_udf(df.nome))
+
+# Mostrar o resultado
+df_maiusculo.show()
+
+--
+#Criar uma UDF que classifique a idade em faixas etárias com base em múltiplas condições.
+from pyspark.sql.functions import udf
+from pyspark.sql.types import StringType
+
+# Função para categorizar faixa etária
+def faixa_etaria(idade):
+    if idade < 18:
+        return "Menor de idade"
+    elif 18 <= idade < 60:
+        return "Adulto"
+    else:
+        return "Idoso"
+
+# Registrar como UDF
+faixa_etaria_udf = udf(faixa_etaria, StringType())
+
+# Criar DataFrame com dados de exemplo
+dados = [(15,), (25,), (65,)]
+colunas = ["idade"]
+df = spark.createDataFrame(dados, colunas)
+
+# Aplicar a UDF
+df_faixa = df.withColumn("faixa_etaria", faixa_etaria_udf(df.idade))
+
+# Mostrar o resultado
+df_faixa.show()
+
+
+
+
+
+
+
+
+
